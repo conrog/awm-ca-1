@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% load leaflet_tags %}
+
+{% block title %}Find Your Local: Map{% endblock %}
+
+{% block extra_header %}
+    <script src="https://cdn.jsdelivr.net/npm/js-cookie@rc/dist/js.cookie.min.js"></script>
+    <style>
+        #map {
+            width: 100vw;
+            height: 65vh;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+        {% if user.is_authenticated %}
+            <p class="font-weight-light mb-1"><strong>Usage:</strong> Tap on the map to update location and display nearest pubs.</p>
+            {% leaflet_map "map" callback="window.map_init_basic" %}
+            <div class="mb-1 text-danger" id="error-message">
+            </div>
+            <div>
+                <h2>Pubs Near You:</h2>
+            <table class="table">
+                <thead class="bg-primary text-light">
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Distance (Meters)</th>
+                </tr>
+                </thead>
+                <tbody id="pub-table">
+
+                </tbody>
+            </table>
+            </div>
+        {% else %}
+            <div class="pt-3 text-center">
+            <h2>Error</h2>
+            <p>You must be logged in to use this service.</p>
+            <a href="{% url 'login' %}" class="btn btn-primary">Log In</a>
+            <br>
+            <p class="my-1">or</p>
+            <a href="{% url 'signup' %}" class="btn btn-primary">Sign Up</a>
+            </div>
+        {% endif %}
+
+{% endblock %}
+
+{% block extra_footer %}
+    <script>
+        let HOST = location.protocol + "//" + location.host;
+        var locationMarker;
+        let circle;
+        let pub_table="";
+        let pubs;
+        let pubLocationMarkers=[];
+        //Fix for issue finding icon when deployed
+        let myIcon = L.icon({
+            iconUrl: '../static/leaflet/images/marker-icon.png',
+            shadowUrl: '../static/leaflet/images/marker-shadow.png',
+            iconSize: [24,36],
+            iconAnchor: [12,36],
+            popupAnchor: [0, -25],
+            shadowAnchor: [12, 40]
+        });
+
+        $("#map").css({
+            "width": "100%",
+            "height": $(document).height - ($("header").height() + $("footer").height + 45)
+        });
+
+        function map_init_basic(map, options) {
+            updateLocation(map);
+            map.setView([53.35,-6.249],12);
+            map.on('touchstart click dbclick', function () {
+                updateLocation(map);
+                get_nearest_pubs(map);
+            });
+        }
+
+        function updateLocation(map) {
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    setMapToCurrentLocation(map, pos);
+                    update_db(pos);
+                },
+                function (err) {
+                    let originalMessage = $("#error-message").html();
+                    $("#error-message").html( originalMessage +
+                    `<p class="mb-1">` + err + `</p>`);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 30000
+                }
+            );
+        }
+
+        function setMapToCurrentLocation(map, pos) {
+            console.log("In setMapToCurrentLocation.");
+            let myLatLong = L.latLng(pos.coords.latitude, pos.coords.longitude);
+            map.flyTo(myLatLong);
+
+            if (locationMarker ) {
+                map.removeLayer(locationMarker);
+            }
+
+            locationMarker = L.marker(myLatLong,{icon:myIcon}).addTo(map);
+
+            L.marker(myLatLong,{icon:myIcon}).addTo(map)
+                .bindPopup("You are here!")
+                .openPopup();
+        }
+
+        function update_db(pos){
+            const csrftoken = Cookies.get('csrftoken');
+            let locationString = pos.coords.longitude + ", " + pos.coords.latitude;
+            $.ajax({
+                type: "POST",
+                headers: {
+                    'X-CSRFToken': csrftoken
+                },
+                url: HOST + "/updatedb",
+                data: {
+                    point: locationString
+                }
+            }).done(function (data, status, xhr){
+                console.log(data["message"])
+            }).fail(function (xhr, status, error ){
+                let originalMessage = $("#error-message").html();
+                $("#error-message").html( originalMessage +
+                    `<p class="mb-1">` + error + `</p>`
+                );
+            }).always(function (){
+                console.log("find_loc_ed finished")
+            });
+        }
+
+        function get_nearest_pubs(map){
+            const csrftoken = Cookies.get('csrftoken');
+            //Removing Previous Pub Markers
+            for(marker of pubLocationMarkers){
+                map.removeLayer(marker);
+            }
+                $.ajax({
+                type: "GET",
+                headers: {
+                    'X-CSRFToken': csrftoken
+                },
+                url: HOST + "/getnearestpubs"
+            }).done(function (data, status, xhr){
+                pubs = data['data'];
+                pub_table="";
+                pubLocationMarkers=[];
+                var marker;
+
+                for(var i=0; i < pubs.length; i++){
+                    pub_table +=
+                        "<tr>" +
+                            "<td>" + (i+1) + "</td>" +
+                            "<td>" + pubs[i].name + "</td>" +
+                            "<td>" + Math.round(pubs[i].distance.slice(0,-1)) + "</td>" +
+                        "</tr>"
+                    var pubLatLong = L.latLng(pubs[i].longitude, pubs[i].latitude);
+                    marker = new L.marker(pubLatLong,{icon:myIcon})
+                        .bindPopup(pubs[i].name)
+                        .addTo(map);
+                    pubLocationMarkers.push(marker);
+                }
+                $("#pub-table").html(pub_table);
+            }).fail(function (xhr, status, error ){
+                var originalMessage = $("#error-message").html();
+                $("#error-message").html( originalMessage +
+                    `<p class="mb-1">` + error + `</p>`
+                );
+            }).always(function (){
+                console.log("finished get_nearest_pubs")
+            });
+
+        }
+    </script>
+{% endblock %}

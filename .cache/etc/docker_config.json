@@ -1,0 +1,6 @@
+{
+  "DEPLOY-SECURE" : "True",
+  "postgis": {
+      "port": 5432
+  }
+}

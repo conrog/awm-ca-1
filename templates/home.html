@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+    <div class="text-center">
+        <h2>Find Your Local <i class="fa fa-beer"></i></h2>
+        <p>Welcome to Find Your Local! The website that will display the 5 closest pubs to your current location</p>
+        {% if user.is_authenticated %}
+            <h3>Hi {{ user.username }}!</h3>
+            <p>Click the button below to view the pubs close to you!</p>
+            <a href="{% url 'map' %}" class="btn btn-primary">Show Me The Pubs!</a>
+        {% else %}
+            <p>You must be logged in to use this service.</p>
+            <a href="{% url 'login' %}" class="btn btn-primary">Log In</a>
+            <br>
+            <p class="my-1">or</p>
+            <a href="{% url 'signup' %}" class="btn btn-primary">Sign Up</a>
+        {% endif %}
+    </div>
+{% endblock %}
